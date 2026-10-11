@@ -4,7 +4,7 @@
 
 用 RFM 将客户分群，生成每类的沟通策略、话术与私域运营流程。
 
-**在线体验：** 部署后填写 https://你的用户名.github.io/orbit-crm/
+**🌐 在线体验：** <https://Sherman-shop.github.io/orbit-crm/>
 
 ## 使用方式
 
