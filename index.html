@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#aa85d6">
+<title>AI 用户分群 & 私域 SOP 生成器 · Orbit CRM</title>
+<meta name="description" content="上传订单或会员数据，自动完成 RFM 八大分群，为每个人群生成触达策略、优惠力度与可直接发送的话术 SOP，并导出带标签的用户名单。">
+<link rel="stylesheet" href="assets/style.css"
+<link rel="stylesheet" href="assets/theme.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+<style>
+  .seg-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); }
+  .seg-card {
+    border: 1px solid var(--line); border-radius: var(--r); padding: 15px;
+    background: var(--surface); cursor: pointer; transition: .18s; position: relative; overflow: hidden;
+  }
+  .seg-card::before { content:""; position:absolute; inset:0 0 auto 0; height:3px; background: var(--c, var(--brand)); }
+  .seg-card:hover { transform: translateY(-2px); border-color: var(--line-strong); background: var(--surface-2); }
+  .seg-card.sel { border-color: var(--c); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--c) 28%, transparent); }
+  .seg-name { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 7px; }
+  .seg-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+  .seg-nums { display: flex; gap: 14px; margin-top: 9px; }
+  .seg-nums > div { font-size: 11px; color: var(--text-faint); }
+  .seg-nums b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .rfm-badge {
+    font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 5px;
+    background: rgba(255,255,255,.07); border: 1px solid var(--line); color: var(--text-dim);
+  }
+  .script-box {
+    background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 14px; margin-bottom: 10px; font-size: 13.6px; line-height: 1.8;
+    white-space: pre-wrap; position: relative;
+  }
+  .script-box .copy-mini {
+    position: absolute; top: 9px; right: 9px; opacity: 0; transition: .16s;
+  }
+  .script-box:hover .copy-mini { opacity: 1; }
+  .sop-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sop-table th { text-align: left; font-size: 11px; color: var(--text-faint); padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  .sop-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .sop-table td:first-child { white-space: nowrap; color: var(--brand-2); font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .sop-table tr:last-child td { border-bottom: none; }
+  .heat { display: grid; grid-template-columns: 56px repeat(5, 1fr); gap: 4px; font-size: 10.5px; }
+  .heat div { padding: 7px 4px; text-align: center; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .heat .hd { color: var(--text-faint); background: none; }
+  .pareto { height: 180px; }
+</style>
+</head>
+<body>
+<div class="grid-overlay"></div>
+<header id="topbar"></header>
+
+<main class="wrap tool-page">
+
+  <div class="tool-hero fade-in">
+    <span class="eyebrow">TOOL 03 · CRM AUTOMATION</span>
+    <h1 style="margin-top:14px">AI 用户分群 &amp; <span class="gradient-text">私域 SOP</span> 生成器</h1>
+    <p class="muted" style="max-width:790px">
+      上传订单或会员数据，自动完成 <b style="color:var(--text)">RFM 八大分群</b>，
+      为每一类人群生成触达策略、优惠力度、发送时机与<b style="color:var(--text)">可直接复制的话术</b>，
+      并导出带分群标签的用户名单，直接导入企微 / CDP 做人群包。
+    </p>
+  </div>
+
+  <div class="split">
+    <!-- ============ 左 ============ -->
+    <div class="sticky-col stack gap-16">
+      <div class="card fade-in">
+        <div class="section-title"><span class="step">1</span>用户数据</div>
+        <textarea id="f-data" rows="7" class="mono" style="font-size:11.5px"
+          placeholder="支持两种格式，自动识别：&#10;① 订单流水：用户ID, 下单日期, 金额&#10;② 会员汇总：用户ID, 最近消费日期, 消费次数, 消费金额"></textarea>
+        <div class="row gap-8" style="margin-top:10px">
+          <button class="btn btn-sm" id="btn-demo" style="flex:1">📥 生成示例数据</button>
+          <label class="btn btn-sm btn-ghost" style="flex:1;cursor:pointer">
+            📎 上传 CSV<input type="file" id="f-file" accept=".csv,.txt" hidden>
+          </label>
+        </div>
+      </div>
+
+      <div class="card fade-in">
+        <div class="section-title"><span class="step">2</span>业务设定</div>
+        <label class="field">
+          <span class="field-label">品牌 / 店铺名</span>
+          <input type="text" id="f-brand" value="轻生活好物" placeholder="用于生成话术">
+        </label>
+        <label class="field">
+          <span class="field-label">主推商品 / 活动</span>
+          <input type="text" id="f-product" value="冬季新品羊绒围巾" placeholder="例：双十一满 300 减 50">
+        </label>
+        <label class="field">
+          <span class="field-label">客服 / 顾问称呼</span>
+          <input type="text" id="f-agent" value="小轻" placeholder="例：小美">
+        </label>
+        <label class="field" style="margin-bottom:0">
+          <span class="field-label">数据基准日</span>
+          <input type="date" id="f-asof">
+          <span class="field-hint">留空则用数据中的最晚日期</span>
+        </label>
+      </div>
+
+      <button class="btn btn-primary btn-lg btn-block" id="btn-run">🎯 开始分群</button>
+
+      <div class="card card-tight fade-in" id="lookup-box" style="display:none">
+        <div class="field-label">🔎 查某个用户属于哪一群</div>
+        <input type="text" id="f-lookup" placeholder="输入用户 ID 后回车">
+        <div id="lookup-out" class="small" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- ============ 右 ============ -->
+    <div class="stack gap-16" id="result" style="display:none">
+
+      <div class="card">
+        <div class="card-head"><h3>📊 资产总览</h3><span class="spacer"></span>
+          <span class="tiny faint" id="meta"></span></div>
+        <div class="kpi-grid" id="kpis"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>👥 八大人群分布</h3><span class="spacer"></span>
+          <span class="tiny faint">点击卡片查看该人群的完整运营方案</span></div>
+        <div class="seg-grid" id="segs"></div>
+      </div>
+
+      <div class="row gap-16" style="align-items:stretch;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:280px">
+          <div class="card-head"><h3>💎 价值集中度</h3></div>
+          <div id="pareto"></div>
+          <p class="small muted" id="pareto-text" style="margin-top:10px"></p>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <div class="card-head"><h3>🔥 R × F 分布热力</h3></div>
+          <div class="heat" id="heat"></div>
+          <p class="tiny faint" style="margin-top:10px">横轴：消费频次分值 F（1 低 → 5 高）；纵轴：最近消费分值 R（5 近 → 1 远）。颜色越亮人数越多。</p>
+        </div>
+      </div>
+
+      <div class="card" id="detail"></div>
+
+      <div class="card">
+        <div class="card-head"><h3>⬇ 导出</h3></div>
+        <div class="row-wrap gap-8">
+          <button class="btn btn-sm" id="btn-csv">导出用户分群名单 CSV</button>
+          <button class="btn btn-sm" id="btn-md">导出全量 SOP 话术手册</button>
+          <button class="btn btn-sm btn-ghost" id="btn-print">🖨 打印 / 存 PDF</button>
+        </div>
+        <p class="tiny faint" style="margin-top:11px">CSV 含「用户ID / R / F / M / RFM分值 / 分群标签 / 建议动作」，可直接导入企业微信、有赞、CDP 建人群包。</p>
+      </div>
+    </div>
+
+    <div id="placeholder">
+      <div class="card empty">
+        <div class="big">🎯</div>
+        <h3 style="color:var(--text-dim);font-weight:600">导入用户数据，开始智能分群</h3>
+        <p class="small" style="margin-top:8px">没有数据？点「生成示例数据」创建 400 位模拟客户立即体验。</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer center">
+    AI 营销工具箱 · 用户分群 &amp; 私域 SOP 生成器 ｜ 全部计算在本地完成，客户数据不出浏览器
+  </footer>
+</main>
+
+<script src="assets/ai.js"></script>
+<script>
+const { $, $$, esc, fmt, compact, pct, money, clamp, toast, copy, download, parseCSV, toCSV, findCol, num, renderTopbar, isoLocal } = UI;
+renderTopbar();
+
+/* ===================== 八大分群定义 ===================== */
+const SEGMENTS = {
+  champion: { key:"champion", name:"重要价值客户", short:"冠军客户", color:"#34d399", rule:"R高 F高 M高",
+    insight:"最近买过、买得频、花得多。他们是品牌利润的基本盘，也是最好的口碑放大器。",
+    goal:"维系尊享感 + 激发主动推荐", budget:"不打折，给权益（优先发货 / 专属客服 / 新品内测）",
+    timing:"每月 1–2 次，避免过度打扰", channel:"企微 1v1 + 专属社群" },
+  keep: { key:"keep", name:"重要保持客户", short:"沉睡高价值", color:"#22d3ee", rule:"R低 F高 M高",
+    insight:"以前买得又多又贵，但最近没动静。流失风险最高、挽回价值也最高的一群人。",
+    goal:"唤醒 + 查明流失原因", budget:"中高（专属回归礼 / 满减叠加）",
+    timing:"7 天内触达 2 次，首触 24h 内未回再补一次", channel:"企微 1v1 + 短信 + 电话（高客单）" },
+  develop: { key:"develop", name:"重要发展客户", short:"高潜新客", color:"#7c5cff", rule:"R高 F低 M高",
+    insight:"刚买过、客单价高，但只买过很少次。把一次性买家变成复购会员的黄金窗口期。",
+    goal:"促成第二单，建立复购习惯", budget:"中（第二单专享券 / 组合搭配价）",
+    timing:"首单后 D+3 / D+7 / D+15 三波", channel:"企微 1v1 + 包裹卡" },
+  retain: { key:"retain", name:"重要挽留客户", short:"流失高价值", color:"#f472b6", rule:"R低 F低 M高",
+    insight:"花过大钱但只来过一两次，且很久没回。大概率是体验或需求不匹配。",
+    goal:"挽回 + 收集差评原因", budget:"高（无门槛大额券，换一次回访机会）",
+    timing:"一次性强触达，不纠缠", channel:"短信 + 企微，附问卷" },
+  general: { key:"general", name:"一般价值客户", short:"活跃小额", color:"#a3e635",  rule:"R高 F高 M低",
+    insight:"来得勤、买得多次，但每次金额小。典型的「薅羊毛型忠诚用户」。",
+    goal:"提客单价（连带 / 升级 / 囤货装）", budget:"低（满额门槛券，门槛设在客单价 1.5 倍）",
+    timing:"结合大促节点，每月 2–3 次", channel:"社群 + 朋友圈" },
+  newbie: { key:"newbie", name:"一般发展客户", short:"新客", color:"#60a5fa", rule:"R高 F低 M低",
+    insight:"刚刚尝鲜的新客户，还没形成品牌认知，流失率最高的阶段。",
+    goal:"做好第一次体验，拿到第二单", budget:"低中（新人复购券，7 天有效制造紧迫）",
+    timing:"D+1 关怀、D+3 使用教程、D+7 复购券", channel:"自动化 SOP（企微 + 短信）" },
+  maintain: { key:"maintain", name:"一般保持客户", short:"常客小额", color:"#fbbf24", rule:"R低 F高 M低",
+    insight:"曾经常来但金额不高，现在也淡了。适合用低成本批量唤醒。",
+    goal:"低成本激活，筛出还愿意回来的人", budget:"低（社群秒杀 / 签到积分）",
+    timing:"批量群发，不做 1v1", channel:"社群 + 朋友圈 + 短信" },
+  churn: { key:"churn", name:"一般挽留客户", short:"流失低价值", color:"#94a3b8", rule:"R低 F低 M低",
+    insight:"只买过一次小额且很久没来。投入产出比最低的一群，控制成本即可。",
+    goal:"极低成本保留触点，不投入人力", budget:"极低（仅节点群发，不发大额券）",
+    timing:"每季度 1 次", channel:"短信 / 订阅号群发" },
+};
+
+/* ===================== 话术生成 ===================== */
+function scripts(seg, c) {
+  const { brand, product, agent } = c;
+  const S = {
+    champion: [
+      `${c.hi}我是${brand}的${agent}~\n翻了下记录，您已经是陪我们走过好几季的老朋友了 🫶\n这次${product}我们只留了很少的量给老客户，想先问问您要不要留一份？\n（不用抢不用凑单，回我一句就给您锁住）`,
+      `${c.hi}悄悄说个事——${brand}下一批新品在做内测，想邀请您当体验官 ✨\n您提的意见会直接影响量产版本，体验装我们免费寄。\n方便的话回复「1」，我把详情发您。`,
+      `${c.hi}感谢这一年的支持！\n已经帮您把会员等级升到了最高档：全年顺丰包邮 + 专属客服 + 新品优先购。\n${product}上新当天会提前 24 小时通知您，不用熬夜蹲点 😊`,
+    ],
+    keep: [
+      `${c.hi}我是${brand}的${agent}。\n看到您上次购买是在 ${c.lastHint}，之后就没再见您了，是不是哪里让您不太满意？\n真心想听听您的想法，这是一张【老客回归无门槛券】，不用也没关系，就当我们的歉意 🙏`,
+      `${c.hi}好久不见啦~\n这段时间${brand}改了挺多：${product}是我们重新打样 3 次才定下来的。\n给您留了一份专属回归价，有效期 7 天。想不想再给我们一次机会？`,
+      `${c.hi}冒昧打扰一次。\n您之前是我们消费 Top 的客户，这样的客人离开我们一定要问清楚原因。\n如果方便，能告诉我是「产品」「价格」还是「服务」的问题吗？一个字也行，我都会认真看。`,
+    ],
+    develop: [
+      `${c.hi}我是${brand}的${agent}，上次的${c.lastHint ? "订单" : "宝贝"}用着还顺手吗？\n很多客人买完都会再配一个${product}，两件一起用体验会好很多。\n给您留了「第二件专享价」，三天内有效 👇`,
+      `${c.hi}提醒一下，您上次买的差不多该补货啦~\n这次下单可以叠加老客券，比上次还便宜一点点。\n需要我直接帮您下单吗？地址还是上次那个就行。`,
+      `${c.hi}看您挺懂货的 👀\n${product}是我们这季最满意的一款，用料比上一代好但价格没涨。\n先发张图给您看看，不喜欢也没关系。`,
+    ],
+    retain: [
+      `${c.hi}我是${brand}的${agent}。\n您已经很久没来了，这次不推销，只想送您一张【无门槛券】当赔罪 🎁\n顺便想问一句：当时是哪里没做好？您的一句话对我们真的很重要。`,
+      `${c.hi}这可能是我最后一次打扰您。\n如果您愿意回来看看，${product}可以给您当时的老客价；\n如果不愿意，回复「退订」我就不再打扰，祝您一切都好 🙏`,
+      `${c.hi}我们做了一次大改版，之前被吐槽最多的地方全改了。\n给您留了一次免费体验的机会，不满意直接退，运费我们出。`,
+    ],
+    general: [
+      `${c.hi}${agent}来啦~ 您是我们群里最活跃的客人之一 😄\n${product}现在有「满 ${c.threshold} 减 ${Math.round(c.threshold * 0.15)}」，\n您平时买的那几样凑一凑刚好够，算下来比单买省不少。`,
+      `${c.hi}上新了！${product}有个双件装，单价比单买低 20%，\n很多老客都是直接囤两件，一件自用一件送人。要不要给您留一组？`,
+      `${c.hi}悄悄告诉您一个省钱方式：先把${product}加进购物车，\n周五晚 8 点群里会发整点券，叠加完是全年最低价 ⏰ 到点我在群里喊您。`,
+    ],
+    newbie: [
+      `${c.hi}我是${brand}的${agent}，您的订单已经发出啦 📦\n这是${product}的使用小贴士（图），按这个方法用效果会好很多。\n有任何问题随时找我，我是真人不是机器人 😊`,
+      `${c.hi}收到货了吗？用着感觉怎么样？\n不管是夸还是吐槽都欢迎告诉我，我们看得到每一条。\n另外给您备了一张【新客专属复购券】，7 天内有效 🎫`,
+      `${c.hi}您的新人券明天就到期啦~\n${product}是新客买得最多的一款，用这张券下来挺划算的。\n需要我帮您看看合不合适吗？`,
+    ],
+    maintain: [
+      `${c.hi}群里的老朋友看过来 👋\n${product}今晚 8 点群内秒杀，只有 50 份，先到先得。\n想要的扣「1」，我提前给您留个名额。`,
+      `${c.hi}好久没在群里看到您啦~\n这个月签到满 7 天可以换一张满减券，不用花钱，顺手的事 😉`,
+      `${c.hi}${brand}周年庆，老客人人有份：\n一张${Math.round(c.threshold * 0.1)}元无门槛券已放进您的账户，直接用就行，不用凑单。`,
+    ],
+    churn: [
+      `${c.hi}${brand}${product}上新，全场最高直降 30%，\n老客人可以再叠一张券。链接在这里，有需要再看 👉`,
+      `${c.hi}年末清仓，很多款是最后一批。\n如果之前关注过${product}，这次价格大概率是年内最低了。`,
+      `${c.hi}我们搬了新仓，发货更快了。\n顺手放一张券在您账户里，什么时候想起我们都能用 🙂`,
+    ],
+  };
+  return S[seg.key];
+}
+
+function sopPlan(seg, c) {
+  const P = {
+    champion: [["D+0","企微 1v1","新品/权益专属预告，强调「只给老客」"],["D+2","朋友圈","发客户真实反馈图，@ 不回复的人"],["D+7","1v1","邀请进品牌共创群 / 内测官"],["每月","权益","生日礼、积分翻倍、优先发货提醒"]],
+    keep:     [["D+0","企微 1v1","致歉式开场 + 无门槛回归券（24h 内发出）"],["D+1","短信","券即将到期提醒，附一句人话"],["D+3","1v1","换角度：询问流失原因，不推销"],["D+7","电话","客单 500+ 的用户由主管回访，收集真实反馈"],["D+14","降级","仍无响应 → 移入低频池，停止 1v1"]],
+    develop:  [["D+0","包裹卡","扫码加企微领「第二单券」"],["D+3","1v1","使用关怀 + 搭配推荐"],["D+7","1v1","第二件专享价，制造 72h 紧迫"],["D+15","社群","拉入主题群，用群氛围促复购"],["D+30","标签","已复购 → 转入价值客户池；未复购 → 转一般发展"]],
+    retain:   [["D+0","短信+企微","无门槛大额券 + 一句真诚致歉"],["D+2","问卷","3 题极简问卷，填完再送 10 元"],["D+7","1v1","最后一次触达，明确告知不再打扰"],["D+8","清理","无响应 → 移出活跃池，仅保留季度群发"]],
+    general:  [["D+0","社群","满减门槛设在其客单价 1.5 倍，引导凑单"],["D+2","朋友圈","组合装 / 囤货装种草"],["D+5","社群","限时秒杀，营造稀缺"],["每月","节点","结合大促做连带，目标提客单 20%"]],
+    newbie:   [["D+1","企微","发货通知 + 使用教程，建立真人感"],["D+3","1v1","体验回访，收集第一印象"],["D+7","1v1","新客复购券（7 天有效）"],["D+13","短信","券到期提醒"],["D+30","分层","已复购 → 高潜池；未复购 → 低频群发池"]],
+    maintain: [["D+0","社群","群内秒杀 / 签到活动，零人力成本"],["D+7","朋友圈","活动预告，不做 1v1"],["每月","群发","节点券批量发放，观察打开率"],["季度","清理","连续 2 季无互动 → 转入流失池"]],
+    churn:    [["季度","短信","节点促销群发，单次成本 < 0.1 元"],["大促","订阅号","统一推送，不做个性化"],["年度","清洗","连续 1 年无动作 → 停止触达，释放短信成本"]],
+  };
+  return P[seg.key];
+}
+
+/* ===================== 数据解析 + RFM ===================== */
+function parseUsers(text, asOfInput) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error("数据至少需要表头 + 1 行");
+  const head = rows[0];
+  const ci = {
+    id:    findCol(head, ["用户id", "客户id", "会员id", "userid", "customerid", "用户", "客户", "会员", "id", "手机号"]),
+    date:  findCol(head, ["最近消费日期", "最后下单", "最近下单", "下单日期", "订单日期", "日期", "date", "lastorder", "消费时间"]),
+    freq:  findCol(head, ["消费次数", "下单次数", "购买次数", "频次", "frequency", "订单数"]),
+    money: findCol(head, ["消费金额", "累计金额", "累计消费", "金额", "monetary", "实付", "gmv", "总金额"]),
+  };
+  if (ci.id < 0) throw new Error("未找到「用户ID」列");
+  if (ci.money < 0) throw new Error("未找到「金额」列");
+  if (ci.date < 0) throw new Error("未找到「日期」列");
+
+  const parseDate = (s) => {
+    const t = String(s).trim().replace(/[年月]/g, "-").replace(/日/g, "").replace(/\//g, "-");
+    const d = new Date(t.length <= 10 ? t + "T00:00:00" : t);
+    return isNaN(d) ? null : d;
+  };
+
+  // 汇总：若无"次数"列则按订单流水聚合
+  const map = new Map();
+  rows.slice(1).forEach((r) => {
+    const id = String(r[ci.id] || "").trim();
+    if (!id) return;
+    const d = parseDate(r[ci.date]);
+    const m = num(r[ci.money]);
+    const f = ci.freq >= 0 ? num(r[ci.freq]) : 1;
+    const cur = map.get(id) || { id, last: null, freq: 0, money: 0 };
+    if (d && (!cur.last || d > cur.last)) cur.last = d;
+    cur.freq += f || 1;
+    cur.money += m;
+    map.set(id, cur);
+  });
+
+  const users = Array.from(map.values()).filter((u) => u.last);
+  if (!users.length) throw new Error("日期列无法解析，请使用 2024-05-20 这类格式");
+
+  const asOf = asOfInput ? new Date(asOfInput + "T00:00:00")
+    : new Date(Math.max(...users.map((u) => u.last.getTime())));
+  users.forEach((u) => {
+    u.recency = Math.max(0, Math.round((asOf - u.last) / 86400000));
+    u.aov = u.freq ? u.money / u.freq : 0;
+  });
+  return { users, asOf };
+}
+
+/** 五分位打分：recency 越小分越高 */
+function quintile(values, reverse) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const q = (p) => sorted[clamp(Math.floor(p * (sorted.length - 1)), 0, sorted.length - 1)];
+  const cuts = [q(0.2), q(0.4), q(0.6), q(0.8)];
+  return (v) => {
+    let s = 1;
+    for (let i = 0; i < 4; i++) if (v > cuts[i]) s = i + 2;
+    return reverse ? 6 - s : s;
+  };
+}
+
+function computeRFM(users) {
+  const sR = quintile(users.map((u) => u.recency), true);
+  const sF = quintile(users.map((u) => u.freq), false);
+  const sM = quintile(users.map((u) => u.money), false);
+  users.forEach((u) => { u.R = sR(u.recency); u.F = sF(u.freq); u.M = sM(u.money); });
+
+  const avg = (k) => users.reduce((a, b) => a + b[k], 0) / users.length;
+  const aR = avg("R"), aF = avg("F"), aM = avg("M");
+  users.forEach((u) => {
+    const hi = { R: u.R >= aR, F: u.F >= aF, M: u.M >= aM };
+    u.seg = hi.M
+      ? (hi.R ? (hi.F ? "champion" : "develop") : (hi.F ? "keep" : "retain"))
+      : (hi.R ? (hi.F ? "general" : "newbie") : (hi.F ? "maintain" : "churn"));
+  });
+  return { aR, aF, aM };
+}
+
+/* ===================== 渲染 ===================== */
+let STATE = null, SELECTED = "champion";
+
+function run() {
+  let d;
+  try { d = parseUsers($("#f-data").value, $("#f-asof").value); }
+  catch (e) { toast(e.message, "bad"); return; }
+
+  const { users, asOf } = d;
+  const bands = computeRFM(users);
+  const totalGMV = users.reduce((a, b) => a + b.money, 0);
+
+  const groups = {};
+  Object.keys(SEGMENTS).forEach((k) => (groups[k] = { key: k, users: [], gmv: 0 }));
+  users.forEach((u) => { groups[u.seg].users.push(u); groups[u.seg].gmv += u.money; });
+
+  STATE = { users, asOf, groups, totalGMV, bands, ctx: readCtx(asOf) };
+
+  $("#placeholder").style.display = "none";
+  $("#result").style.display = "";
+  $("#lookup-box").style.display = "";
+  $("#meta").textContent = `基准日 ${isoLocal(asOf)} · 共 ${users.length} 位客户`;
+
+  /* KPI */
+  const sorted = users.slice().sort((a, b) => b.money - a.money);
+  const top20 = sorted.slice(0, Math.max(1, Math.round(users.length * 0.2)));
+  const top20Share = top20.reduce((a, b) => a + b.money, 0) / totalGMV;
+  const atRisk = groups.keep.gmv + groups.retain.gmv;
+  const kpi = (l, v, s, tone) => `<div class="kpi"><div class="kpi-label">${l}</div>
+    <div class="kpi-value" ${tone ? `style="color:var(--${tone})"` : ""}>${v}</div><div class="kpi-sub">${s || ""}</div></div>`;
+  $("#kpis").innerHTML = [
+    kpi("客户总数", fmt(users.length, 0), "去重后"),
+    kpi("累计 GMV", money(totalGMV), "全部历史"),
+    kpi("客均贡献", money(totalGMV / users.length), `平均 ${fmt(users.reduce((a, b) => a + b.freq, 0) / users.length, 1)} 单`),
+    kpi("平均客单价", money(users.reduce((a, b) => a + b.aov, 0) / users.length)),
+    kpi("高价值客户", fmt(groups.champion.users.length + groups.develop.users.length + groups.keep.users.length + groups.retain.users.length, 0),
+        `贡献 ${pct((groups.champion.gmv + groups.develop.gmv + groups.keep.gmv + groups.retain.gmv) / totalGMV, 0)} GMV`, "ok"),
+    kpi("流失风险金额", money(atRisk), `${fmt(groups.keep.users.length + groups.retain.users.length, 0)} 人待唤醒`, "bad"),
+    kpi("Top20% 贡献", pct(top20Share, 0), "二八检验"),
+    kpi("平均沉睡天数", fmt(users.reduce((a, b) => a + b.recency, 0) / users.length, 0) + " 天"),
+  ].join("");
+
+  /* 分群卡 */
+  $("#segs").innerHTML = Object.values(SEGMENTS).map((s) => {
+    const g = groups[s.key];
+    const share = users.length ? g.users.length / users.length : 0;
+    return `<div class="seg-card ${s.key === SELECTED ? "sel" : ""}" data-k="${s.key}" style="--c:${s.color}">
+      <div class="seg-name"><span class="seg-dot"></span>${s.name}</div>
+      <div class="tiny faint" style="margin-top:3px"><span class="rfm-badge">${s.rule}</span></div>
+      <div class="seg-nums">
+        <div>人数<b>${fmt(g.users.length, 0)}</b></div>
+        <div>占比<b>${pct(share, 0)}</b></div>
+        <div>GMV 占比<b>${pct(totalGMV ? g.gmv / totalGMV : 0, 0)}</b></div>
+      </div>
+      <div class="bar" style="margin-top:11px"><i style="width:${(totalGMV ? g.gmv / totalGMV : 0) * 100}%;background:${s.color}"></i></div>
+    </div>`;
+  }).join("");
+  $$(".seg-card").forEach((c) => c.addEventListener("click", () => { SELECTED = c.dataset.k; run2(); }));
+
+  /* 帕累托 */
+  renderPareto(sorted, totalGMV);
+  $("#pareto-text").innerHTML =
+    `贡献最高的 20% 客户带来了 <b style="color:var(--ok)">${pct(top20Share, 0)}</b> 的 GMV。` +
+    (top20Share > 0.65
+      ? "集中度偏高，<b>必须优先保住头部客户</b>，同时加速培养腰部复购。"
+      : "集中度较分散，说明单客价值还有提升空间，重点做<b>连带与复购</b>。");
+
+  /* 热力 */
+  renderHeat(users);
+
+  run2();
+  toast(`分群完成：${users.length} 位客户 → 8 个人群`, "ok");
+  $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function readCtx(asOf) {
+  return {
+    brand: $("#f-brand").value.trim() || "本店",
+    product: $("#f-product").value.trim() || "新品",
+    agent: $("#f-agent").value.trim() || "小助手",
+    hi: "您好～",
+    threshold: 299,
+    lastHint: asOf ? isoLocal(new Date(asOf.getTime() - 86400000 * 60)) : "",
+  };
+}
+
+function renderPareto(sorted, totalGMV) {
+  const W = 420, H = 170, P = { l: 34, r: 10, t: 10, b: 22 };
+  const n = sorted.length;
+  const pts = [];
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    acc += sorted[i].money;
+    pts.push([(i + 1) / n, acc / totalGMV]);
+  }
+  const x = (v) => P.l + v * (W - P.l - P.r);
+  const y = (v) => H - P.b - v * (H - P.t - P.b);
+  const path = pts.filter((_, i) => i % Math.max(1, Math.floor(n / 160)) === 0 || i === n - 1)
+    .map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join(" ");
+  let grid = "";
+  [0.25, 0.5, 0.75, 1].forEach((v) => {
+    grid += `<line x1="${P.l}" y1="${y(v)}" x2="${W - P.r}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/>
+             <text x="${P.l - 6}" y="${y(v) + 3}" text-anchor="end" font-size="9" fill="#6f7798">${v * 100}%</text>`;
+  });
+  return ($("#pareto").innerHTML = `<svg class="chart pareto" viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="pg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+    ${grid}
+    <line x1="${x(0.2)}" y1="${P.t}" x2="${x(0.2)}" y2="${H - P.b}" stroke="#f472b6" stroke-dasharray="4 4" stroke-width="1"/>
+    <text x="${x(0.2) + 4}" y="${P.t + 10}" font-size="9" fill="#f472b6">Top 20%</text>
+    <path d="${path}" fill="none" stroke="url(#pg)" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="${P.l}" y1="${H - P.b}" x2="${W - P.r}" y2="${H - P.b}" stroke="rgba(255,255,255,.18)"/>
+    <text x="${W / 2}" y="${H - 4}" text-anchor="middle" font-size="9" fill="#6f7798">客户累计占比（按消费金额降序）</text>
+  </svg>`);
+}
+
+function renderHeat(users) {
+  const m = {};
+  users.forEach((u) => { const k = u.R + "-" + u.F; m[k] = (m[k] || 0) + 1; });
+  const max = Math.max(...Object.values(m), 1);
+  let h = '<div class="hd"></div>' + [1, 2, 3, 4, 5].map((f) => `<div class="hd">F${f}</div>`).join("");
+  for (let r = 5; r >= 1; r--) {
+    h += `<div class="hd">R${r}</div>`;
+    for (let f = 1; f <= 5; f++) {
+      const v = m[r + "-" + f] || 0;
+      const a = v / max;
+      h += `<div style="background:rgba(124,92,255,${0.08 + a * 0.75});color:${a > 0.45 ? "#fff" : "#a3abc9"}" title="R${r} F${f}：${v} 人">${v || ""}</div>`;
+    }
+  }
+  $("#heat").innerHTML = h;
+}
+
+function run2() {
+  const s = SEGMENTS[SELECTED], g = STATE.groups[SELECTED], c = STATE.ctx;
+  $$(".seg-card").forEach((el) => el.classList.toggle("sel", el.dataset.k === SELECTED));
+
+  const list = scripts(s, c), sop = sopPlan(s, c);
+  const sample = g.users.slice().sort((a, b) => b.money - a.money).slice(0, 5);
+  const avgM = g.users.length ? g.gmv / g.users.length : 0;
+  const avgR = g.users.length ? g.users.reduce((a, b) => a + b.recency, 0) / g.users.length : 0;
+  const avgF = g.users.length ? g.users.reduce((a, b) => a + b.freq, 0) / g.users.length : 0;
+
+  $("#detail").innerHTML = `
+    <div class="card-head" style="border-color:${s.color}44">
+      <span style="width:11px;height:11px;border-radius:50%;background:${s.color};flex:none"></span>
+      <h3>${s.name} · 运营方案</h3>
+      <span class="tag" style="border-color:${s.color}66;color:${s.color}">${s.rule}</span>
+      <span class="spacer"></span>
+      <span class="tiny faint">${fmt(g.users.length, 0)} 人 · 人均 ${money(avgM)} · 平均沉睡 ${fmt(avgR, 0)} 天 · 平均 ${fmt(avgF, 1)} 单</span>
+    </div>
+
+    <div class="callout callout-info" style="margin-bottom:16px">
+      <span class="ico">🔍</span><span><b>人群画像：</b>${s.insight}</span>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:18px">
+      <div class="kpi"><div class="kpi-label">沟通目标</div><div style="font-size:13.5px;margin-top:6px">${s.goal}</div></div>
+      <div class="kpi"><div class="kpi-label">优惠力度</div><div style="font-size:13.5px;margin-top:6px">${s.budget}</div></div>
+      <div class="kpi"><div class="kpi-label">触达频率</div><div style="font-size:13.5px;margin-top:6px">${s.timing}</div></div>
+      <div class="kpi"><div class="kpi-label">主渠道</div><div style="font-size:13.5px;margin-top:6px">${s.channel}</div></div>
+    </div>
+
+    <div class="section-title">📅 自动化 SOP 节奏</div>
+    <div class="table-scroll" style="margin-bottom:20px">
+      <table class="sop-table">
+        <thead><tr><th>时间节点</th><th>渠道</th><th>动作</th></tr></thead>
+        <tbody>${sop.map((r) => `<tr><td>${esc(r[0])}</td><td><span class="tag">${esc(r[1])}</span></td><td>${esc(r[2])}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+
+    <div class="section-title">💬 可直接发送的话术 <span class="spacer"></span>
+      <button class="btn btn-sm btn-ghost" id="btn-ai-script" style="font-weight:500">${AI.ready ? "🤖 用大模型重写" : "🤖 接入大模型后可重写"}</button>
+    </div>
+    <div id="script-list">
+      ${list.map((t, i) => `<div class="script-box">${esc(t)}
+        <button class="btn btn-sm icon-btn copy-mini" data-t="${esc(t)}" title="复制">📋</button></div>`).join("")}
+    </div>
+
+    ${sample.length ? `<div class="section-title" style="margin-top:20px">👤 该群典型客户（按消费额）</div>
+    <div class="table-scroll"><table class="data">
+      <thead><tr><th>用户ID</th><th class="num">沉睡天数</th><th class="num">消费次数</th><th class="num">累计金额</th><th class="num">客单价</th><th>RFM</th></tr></thead>
+      <tbody>${sample.map((u) => `<tr><td>${esc(u.id)}</td><td class="num">${u.recency}</td><td class="num">${fmt(u.freq, 0)}</td>
+        <td class="num">${money(u.money)}</td><td class="num">${money(u.aov)}</td>
+        <td><span class="rfm-badge">R${u.R} F${u.F} M${u.M}</span></td></tr>`).join("")}</tbody>
+    </table></div>` : ""}
+  `;
+
+  $$("#detail .copy-mini").forEach((b) => b.addEventListener("click", (e) => copy(e.target.dataset.t, "话术")));
+  $("#btn-ai-script").addEventListener("click", aiRewrite);
+}
+
+/* ---------- 大模型重写话术 ---------- */
+async function aiRewrite() {
+  if (!AI.ready) { AI.openSettings(() => location.reload()); return; }
+  const s = SEGMENTS[SELECTED], c = STATE.ctx, g = STATE.groups[SELECTED];
+  const btn = $("#btn-ai-script");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 生成中';
+  try {
+    const arr = await AI.json([
+      { role: "system", content: "你是私域运营专家，擅长写企业微信 1v1 话术：口语化、有真人感、不像群发、不硬推销。只输出 JSON。" },
+      { role: "user", content:
+        `品牌：${c.brand}；主推：${c.product}；客服自称：${c.agent}。\n` +
+        `目标人群：${s.name}（${s.rule}，${s.insight}）\n人群规模 ${g.users.length} 人，人均消费 ${Math.round(g.gmv / Math.max(1, g.users.length))} 元。\n` +
+        `沟通目标：${s.goal}；优惠力度：${s.budget}。\n\n` +
+        `请写 3 条不同角度的企微 1v1 话术，每条 60–120 字，可带少量 emoji，不要出现"亲爱的顾客"这类群发感词汇。\n` +
+        `严格返回 JSON：{"scripts":["...","...","..."]}` },
+    ], { temperature: 0.9, maxTokens: 1200 });
+    const out = (arr.scripts || arr).slice(0, 3);
+    $("#script-list").innerHTML = out.map((t) =>
+      `<div class="script-box">${esc(t)}<button class="btn btn-sm icon-btn copy-mini" data-t="${esc(t)}">📋</button></div>`).join("")
+      + '<div class="tiny faint" style="margin-top:6px">🤖 本组话术由大模型实时生成</div>';
+    $$("#script-list .copy-mini").forEach((b) => b.addEventListener("click", (e) => copy(e.target.dataset.t, "话术")));
+    toast("话术已由大模型重写", "ok");
+  } catch (e) {
+    toast("调用失败：" + String(e.message).slice(0, 60), "bad");
+  }
+  btn.disabled = false; btn.innerHTML = "🤖 用大模型重写";
+}
+
+/* ===================== 导出 ===================== */
+function exportCSV() {
+  if (!STATE) return;
+  const rows = [["用户ID", "最近消费日期", "沉睡天数", "消费次数", "累计金额", "客单价", "R", "F", "M", "RFM分值", "分群标签", "核心动作"]];
+  STATE.users.slice().sort((a, b) => a.seg.localeCompare(b.seg) || b.money - a.money).forEach((u) => {
+    const s = SEGMENTS[u.seg];
+    rows.push([u.id, isoLocal(u.last), u.recency, u.freq, u.money.toFixed(2), u.aov.toFixed(2),
+      u.R, u.F, u.M, `${u.R}${u.F}${u.M}`, s.name, s.goal]);
+  });
+  download(`用户分群名单-${UI.todayISO()}.csv`, toCSV(rows), "text/csv");
+}
+
+function exportMD() {
+  if (!STATE) return;
+  const c = STATE.ctx;
+  const md = [
+    `# ${c.brand} · 私域用户分群运营手册`, ``,
+    `> 生成时间：${new Date().toLocaleString("zh-CN")}　|　基准日：${isoLocal(STATE.asOf)}　|　客户总数：${STATE.users.length}　|　累计 GMV：${money(STATE.totalGMV)}`, ``,
+    `## 一、人群分布总览`, ``,
+    `| 人群 | 规则 | 人数 | 人数占比 | GMV 占比 | 人均贡献 |`, `| --- | --- | ---: | ---: | ---: | ---: |`,
+    ...Object.values(SEGMENTS).map((s) => {
+      const g = STATE.groups[s.key];
+      return `| **${s.name}** | ${s.rule} | ${g.users.length} | ${pct(g.users.length / STATE.users.length, 0)} | ${pct(STATE.totalGMV ? g.gmv / STATE.totalGMV : 0, 0)} | ${money(g.users.length ? g.gmv / g.users.length : 0)} |`;
+    }),
+    ``, `## 二、分群运营方案`, ``,
+    ...Object.values(SEGMENTS).flatMap((s) => {
+      const g = STATE.groups[s.key];
+      return [
+        `### ${s.name}（${s.rule}）— ${g.users.length} 人`, ``,
+        `**人群画像**：${s.insight}`, ``,
+        `| 维度 | 策略 |`, `| --- | --- |`,
+        `| 沟通目标 | ${s.goal} |`, `| 优惠力度 | ${s.budget} |`,
+        `| 触达频率 | ${s.timing} |`, `| 主渠道 | ${s.channel} |`, ``,
+        `**自动化 SOP**`, ``, `| 节点 | 渠道 | 动作 |`, `| --- | --- | --- |`,
+        ...sopPlan(s, c).map((r) => `| ${r[0]} | ${r[1]} | ${r[2]} |`), ``,
+        `**话术模板**`, ``,
+        ...scripts(s, c).flatMap((t, i) => [`${i + 1}. `, "```text", t, "```", ""]),
+      ];
+    }),
+    `---`, `_由 AI 营销工具箱 · 用户分群 & 私域 SOP 生成器生成_`,
+  ].join("\n");
+  download(`${c.brand}-私域运营手册-${UI.todayISO()}.md`, md, "text/markdown");
+}
+
+/* ===================== 示例数据 ===================== */
+function demoData() {
+  // 可复现的伪随机，保证每次示例结构稳定但有真实感
+  let seed = 20240815;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const today = new Date();
+  const lines = ["用户ID,最近消费日期,消费次数,消费金额"];
+  for (let i = 1; i <= 400; i++) {
+    const r = rnd();
+    let recency, freq, money;
+    if (r < 0.12) { recency = Math.floor(rnd() * 25); freq = 6 + Math.floor(rnd() * 14); money = 1800 + rnd() * 6000; }      // 冠军
+    else if (r < 0.22) { recency = 110 + Math.floor(rnd() * 180); freq = 5 + Math.floor(rnd() * 10); money = 1500 + rnd() * 4500; } // 沉睡高价值
+    else if (r < 0.33) { recency = Math.floor(rnd() * 30); freq = 1 + Math.floor(rnd() * 2); money = 900 + rnd() * 2200; }   // 高潜新客
+    else if (r < 0.40) { recency = 160 + Math.floor(rnd() * 200); freq = 1 + Math.floor(rnd() * 2); money = 800 + rnd() * 2600; } // 流失高价值
+    else if (r < 0.55) { recency = Math.floor(rnd() * 35); freq = 4 + Math.floor(rnd() * 8); money = 200 + rnd() * 450; }    // 活跃小额
+    else if (r < 0.72) { recency = Math.floor(rnd() * 28); freq = 1; money = 80 + rnd() * 260; }                             // 新客
+    else if (r < 0.86) { recency = 120 + Math.floor(rnd() * 160); freq = 4 + Math.floor(rnd() * 7); money = 180 + rnd() * 420; } // 常客小额
+    else { recency = 200 + Math.floor(rnd() * 320); freq = 1; money = 60 + rnd() * 220; }                                    // 流失
+    const d = new Date(today.getTime() - recency * 86400000);
+    lines.push(`U${String(10000 + i)},${isoLocal(d)},${freq},${money.toFixed(2)}`);
+  }
+  return lines.join("\n");
+}
+
+/* ===================== 绑定 ===================== */
+$("#btn-run").addEventListener("click", run);
+$("#btn-demo").addEventListener("click", () => { $("#f-data").value = demoData(); toast("已生成 400 位模拟客户，点击「开始分群」"); });
+$("#btn-csv").addEventListener("click", exportCSV);
+$("#btn-md").addEventListener("click", exportMD);
+$("#btn-print").addEventListener("click", () => window.print());
+$("#f-file").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => { $("#f-data").value = fr.result; toast("已读取 " + f.name, "ok"); };
+  fr.readAsText(f, "utf-8");
+});
+$("#f-lookup").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !STATE) return;
+  const id = e.target.value.trim();
+  const u = STATE.users.find((x) => x.id === id || x.id.toLowerCase() === id.toLowerCase());
+  if (!u) { $("#lookup-out").innerHTML = '<span class="tag tag-bad">未找到该用户</span>'; return; }
+  const s = SEGMENTS[u.seg];
+  $("#lookup-out").innerHTML = `<div class="stack gap-4">
+    <div><span class="tag" style="border-color:${s.color}66;color:${s.color}">${s.name}</span>
+      <span class="rfm-badge">R${u.R} F${u.F} M${u.M}</span></div>
+    <div class="faint tiny">沉睡 ${u.recency} 天 · ${fmt(u.freq, 0)} 单 · 累计 ${money(u.money)}</div>
+    <div class="tiny" style="color:var(--text-dim)">建议：${s.goal}</div></div>`;
+  SELECTED = u.seg; run2();
+});
+["f-brand", "f-product", "f-agent"].forEach((id) =>
+  $("#" + id).addEventListener("change", () => { if (STATE) { STATE.ctx = readCtx(STATE.asOf); run2(); } })
+);
+</script>
+</body>
+</html>
